@@ -1,0 +1,7 @@
+{
+    "env": {
+        "MONGO_USER": "taricdf",
+        "MONGO_PASSWORD": "AplineAlpha2",
+        "MONGO_DB": "comp3133_assigment1"
+    }
+}
