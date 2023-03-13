@@ -4,10 +4,12 @@ const { graphqlHTTP } = require('express-graphql');
 const { buildSchema } = require('graphql');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 
 const User = require('./models/user');
 const Employee = require('./models/employee');
+const employee = require('./models/employee');
 
 const app = express();
 
@@ -45,13 +47,23 @@ app.use('/graphql', graphqlHTTP({
             email: String!
         }
 
+        type AuthData {
+            userId: ID!
+            token: String!
+            tokenExp: Int!
+        }
+
         type RootQuery {
-            users: [User!]!
+            employees: [Employee!]!
+            login(email: String!, password: String!): AuthData
+            findEmployee(_id: ID): Employee
         }
 
         type RootMutation {
             createUser(userInput: UserInput): User
             createEmployee(employeeInput: EmployeeInput): Employee
+            deleteEmployee(_id: ID): Employee
+            updateEmployee(_id: ID, employeeInput: EmployeeInput): Employee
         }
 
         schema {
@@ -60,11 +72,11 @@ app.use('/graphql', graphqlHTTP({
         }   
     `),
     rootValue: {
-        users: () => {
-            return User.find()
-            .then(users => {
-                return users.map(user => {
-                    return { ...user._doc };
+        employees: () => {
+            return Employee.find()
+            .then(employees => {
+                return employees.map(employee => {
+                    return { ...employee._doc };
                 })
             })
             .catch(err => {
@@ -117,6 +129,60 @@ app.use('/graphql', graphqlHTTP({
             .catch(err => {
                 throw err;
             });
+        },
+        login: async ({ email, password }) => {
+            const user = await User.findOne({ email: email });
+            if(!user) { 
+                throw new Error('User does not exist.');
+            }
+            const isEqual = await bcrypt.compare(password, user.password);
+            if (!isEqual) {
+                throw new Error('Password is incorrect.');
+            }
+            const token = jwt.sign({ userId: user.id, email: user.email }, 'somesupersecretkey', { expiresIn: '1h' });
+            return { userId: user.id, token: token, tokenExp: 1 };
+        },
+        deleteEmployee: ({ id }) => {
+            return Employee.findOneAndDelete(id)
+            .then(employee => {
+                if (!employee) {
+                    throw new Error('Employee does not exist.');
+                }
+                return { ...employee._doc };
+            })
+            .catch(err => {
+                throw err;
+            });
+        },
+        findEmployee: ({ id }) => {
+            return Employee.findOne(id)
+            .then(employee => {
+                if (!employee) {
+                    throw new Error('Employee does not exist.');
+                }
+                return { ...employee._doc };
+            })
+            .catch(err => {
+                throw err;
+            });
+        },
+        updateEmployee : (args) => {
+            return Employee.findByIdAndUpdate(args._id, {$set: {
+                first_name: args.employeeInput.first_name,
+                last_name: args.employeeInput.last_name,
+                gender: args.employeeInput.gender,
+                salary: args.employeeInput.salary,
+                email: args.employeeInput.email
+            }})
+            .then(employee => {
+                if (!employee) {
+                    throw new Error('Employee does not exist.');
+                }
+                return { ...employee._doc };
+            })
+            .catch(err => {
+                throw err;
+            })
         }
     },
     graphiql: true
